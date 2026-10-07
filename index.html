@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EyeWrite - Type Beyond Limits</title>
+  <meta name="description" content="EyeWrite - Eye & Nose tracking virtual keyboard allowing hands-free typing using facial gestures and blinks.">
+  
+  <!-- Google Fonts: Inter & Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  
+  <!-- MediaPipe CDN Libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+  <!-- Export Generation Libraries (PDF, Image, PPT) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+
+  <!-- Application Styles -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Ambient Background SVG Patterns -->
+  <div class="bg-pattern" aria-hidden="true">
+    <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+          <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(0, 0, 0, 0.03)" stroke-width="1" />
+        </pattern>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#grid)" />
+    </svg>
+    <div class="glow-orb glow-orb-1"></div>
+    <div class="glow-orb glow-orb-2"></div>
+  </div>
+
+  <!-- Custom Floating Nose Cursor -->
+  <div id="eyewrite-cursor" class="eyewrite-cursor" aria-hidden="true">
+    <div class="cursor-ring"></div>
+    <div class="cursor-dot"></div>
+    <div class="cursor-ripple"></div>
+  </div>
+
+  <!-- Main App Layout -->
+  <div class="app-container">
+
+    <!-- Top Navigation Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <div class="status-badge" id="system-status-badge">
+          <span class="pulse-dot"></span>
+          <span class="status-text">SYSTEM <strong id="status-state-text">ACTIVE</strong></span>
+        </div>
+      </div>
+
+      <div class="header-center">
+        <h1 class="logo-title">EyeWrite</h1>
+        <span class="tag-pill">
+          <span class="blue-dot"></span> TYPE BEYOND LIMITS
+        </span>
+      </div>
+
+      <div class="header-right">
+        <button id="toggle-settings-btn" class="icon-btn" title="Settings & Calibration">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Content Workspace Grid -->
+    <main class="workspace-grid">
+
+      <!-- LEFT COLUMN: Live Camera & Diagnostics -->
+      <section class="left-panel">
+        
+        <!-- Video Feed Container -->
+        <div class="video-card">
+          <div class="video-overlay-tag">
+            <span class="pulse-dot green"></span>
+            <span>Live Tracking</span>
+          </div>
+          
+          <div class="camera-select-overlay">
+            <select id="camera-select" class="camera-select-dropdown" title="Select Laptop / Desktop Camera">
+              <option value="">Default Laptop Camera</option>
+            </select>
+          </div>
+          
+          <div class="video-wrapper">
+            <video id="webcam-feed" autoplay muted playsinline class="webcam-video"></video>
+            <canvas id="tracking-canvas" class="tracking-canvas"></canvas>
+            
+            <div id="video-placeholder" class="video-placeholder">
+              <div class="spinner"></div>
+              <p>Initializing Camera & MediaPipe...</p>
+              <button id="start-camera-btn" class="control-btn glow-btn" style="margin-top: 8px;">Start / Allow Camera</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- System Diagnostics Card -->
+        <div class="diagnostics-card">
+          <h3 class="card-subtitle">SYSTEM DIAGNOSTICS</h3>
+          
+          <div class="diag-grid">
+            <div class="diag-row">
+              <span class="diag-label">Nose Coord:</span>
+              <span class="diag-val" id="diag-nose-coord">0.00, 0.00</span>
+            </div>
+
+            <div class="diag-row">
+              <span class="diag-label">Cursor Vector:</span>
+              <span class="diag-val cyan" id="diag-cursor-vector">0, 0</span>
+            </div>
+
+            <div class="diag-row">
+              <span class="diag-label">EAR:</span>
+              <span class="diag-val" id="diag-ear">0.000</span>
+            </div>
+
+            <div class="diag-row">
+              <span class="diag-label">Eye State:</span>
+              <span class="diag-val status-open" id="diag-eye-state">OPEN</span>
+            </div>
+
+            <div class="diag-row">
+              <span class="diag-label">Total Blinks:</span>
+              <span class="diag-val bold" id="diag-total-blinks">0</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Control Mode Switcher -->
+        <div class="mode-card">
+          <h3 class="card-subtitle">CURSOR TRACKING MODE</h3>
+          <div class="mode-toggle-group">
+            <button id="mode-nose-btn" class="mode-select-btn active" title="Move cursor with Nose tip, Eye blink selects/types">
+              🎯 Nose + Eye Blink
+            </button>
+            <button id="mode-finger-btn" class="mode-select-btn" title="Move cursor with Index Finger, Pinch thumb & index finger to select/type">
+              👆 Finger Cursor + Pinch Tap
+            </button>
+            <button id="mode-mouse-btn" class="mode-select-btn" title="Move cursor with Mouse, Click or Space selects/types">
+              🖱️ Mouse Fallback
+            </button>
+          </div>
+        </div>
+
+        <!-- Quick Calibration Bar -->
+        <div class="quick-controls-card">
+          <button id="calibrate-btn" class="control-btn glow-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="16"></line>
+              <line x1="8" y1="12" x2="16" y2="12"></line>
+            </svg>
+            Calibrate Center
+          </button>
+        </div>
+
+        <!-- Recent Typed Text History Card -->
+        <div class="recent-typed-card">
+          <div class="card-header-flex">
+            <h3 class="card-subtitle">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+              </svg>
+              RECENT TYPED TEXT
+            </h3>
+            <button id="clear-recent-btn" class="action-icon-btn sm-btn" title="Clear Recent Typed List">Clear</button>
+          </div>
+          <div class="recent-text-list" id="recent-text-list">
+            <div class="recent-text-item">CING</div>
+            <div class="recent-text-item">Hello</div>
+            <div class="recent-text-item">EyeWrite</div>
+            <div class="recent-text-item">Type Beyond Limits</div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- RIGHT COLUMN: Output Box & Suggestions Above Keyboard -->
+      <section class="right-panel">
+        
+        <!-- Main Output Text Container -->
+        <div class="output-card">
+          <div class="output-header">
+            <div class="output-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 20h9"></path>
+                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+              </svg>
+              <span>Type Here</span>
+            </div>
+            <div class="output-actions">
+              <button id="speak-btn" class="action-icon-btn" title="Speak Text (TTS)">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                  <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                </svg>
+                Speak
+              </button>
+              <button id="copy-btn" class="action-icon-btn" title="Copy to Clipboard">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                Copy Text
+              </button>
+              <button id="clear-all-btn" class="action-icon-btn danger" title="Clear All Typed Text">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="3 6 5 6 21 6"></polyline>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                </svg>
+                Clear All
+              </button>
+            </div>
+          </div>
+
+          <div class="output-text-wrapper">
+            <textarea 
+              id="output-textarea" 
+              class="output-textarea" 
+              placeholder="Look at letters and blink to type..." 
+              readonly
+            ></textarea>
+          </div>
+        </div>
+
+        <!-- Quick Word Predictions Bar (Positioned UP / ABOVE Keyboard) -->
+        <div class="word-suggestions" id="word-suggestions-bar">
+          <span class="suggestion-label">Suggestions:</span>
+          <div class="suggestions-list" id="suggestions-list">
+            <!-- Dynamically populated buttons -->
+          </div>
+        </div>
+
+        <!-- Full On-Screen Virtual Keyboard Container (Exact Match to Reference Image) -->
+        <div class="keyboard-card">
+          <div class="keyboard-grid" id="virtual-keyboard">
+
+            <!-- Row 1: Esc, Number Row, Symbols, Backspace -->
+            <div class="key-row">
+              <button class="key-btn special-key esc-key" data-key="ESC">Esc</button>
+              <button class="key-btn symbol-key" data-key="~"><span>~</span><span>`</span></button>
+              <button class="key-btn symbol-key" data-key="1"><span>!</span><span>1</span></button>
+              <button class="key-btn symbol-key" data-key="2"><span>@</span><span>2</span></button>
+              <button class="key-btn symbol-key" data-key="3"><span>#</span><span>3</span></button>
+              <button class="key-btn symbol-key" data-key="4"><span>$</span><span>4</span></button>
+              <button class="key-btn symbol-key" data-key="5"><span>%</span><span>5</span></button>
+              <button class="key-btn symbol-key" data-key="6"><span>^</span><span>6</span></button>
+              <button class="key-btn symbol-key" data-key="7"><span>&amp;</span><span>7</span></button>
+              <button class="key-btn symbol-key" data-key="8"><span>*</span><span>8</span></button>
+              <button class="key-btn symbol-key" data-key="9"><span>(</span><span>9</span></button>
+              <button class="key-btn symbol-key" data-key="0"><span>)</span><span>0</span></button>
+              <button class="key-btn symbol-key" data-key="-"><span>_</span><span>-</span></button>
+              <button class="key-btn symbol-key" data-key="="><span>+</span><span>=</span></button>
+              <button class="key-btn special-key backspace-key" data-key="DELETE" title="Backspace">⌫</button>
+            </div>
+
+            <!-- Row 2: Tab, QWERTY, Brackets, Pipe -->
+            <div class="key-row">
+              <button class="key-btn special-key tab-key" data-key="TAB">Tab</button>
+              <button class="key-btn" data-key="Q">Q</button>
+              <button class="key-btn" data-key="W">W</button>
+              <button class="key-btn" data-key="E">E</button>
+              <button class="key-btn" data-key="R">R</button>
+              <button class="key-btn" data-key="T">T</button>
+              <button class="key-btn" data-key="Y">Y</button>
+              <button class="key-btn" data-key="U">U</button>
+              <button class="key-btn" data-key="I">I</button>
+              <button class="key-btn" data-key="O">O</button>
+              <button class="key-btn" data-key="P">P</button>
+              <button class="key-btn symbol-key" data-key="["><span>{</span><span>[</span></button>
+              <button class="key-btn symbol-key" data-key="]"><span>}</span><span>]</span></button>
+              <button class="key-btn symbol-key" data-key="\"><span>|</span><span>\</span></button>
+            </div>
+
+            <!-- Row 3: Caps, ASDF, Semicolon, Quote, Enter -->
+            <div class="key-row">
+              <button class="key-btn special-key caps-key" data-key="CAPS">Caps</button>
+              <button class="key-btn" data-key="A">A</button>
+              <button class="key-btn" data-key="S">S</button>
+              <button class="key-btn" data-key="D">D</button>
+              <button class="key-btn" data-key="F">F</button>
+              <button class="key-btn" data-key="G">G</button>
+              <button class="key-btn" data-key="H">H</button>
+              <button class="key-btn" data-key="J">J</button>
+              <button class="key-btn" data-key="K">K</button>
+              <button class="key-btn" data-key="L">L</button>
+              <button class="key-btn symbol-key" data-key=";"><span>:</span><span>;</span></button>
+              <button class="key-btn symbol-key" data-key="'"><span>"</span><span>'</span></button>
+              <button class="key-btn special-key enter-key" data-key="ENTER">Enter</button>
+            </div>
+
+            <!-- Row 4: Shift, ZXCV, Comma, Period, Slash, Shift -->
+            <div class="key-row">
+              <button class="key-btn special-key shift-key" data-key="SHIFT">Shift</button>
+              <button class="key-btn" data-key="Z">Z</button>
+              <button class="key-btn" data-key="X">X</button>
+              <button class="key-btn" data-key="C">C</button>
+              <button class="key-btn" data-key="V">V</button>
+              <button class="key-btn" data-key="B">B</button>
+              <button class="key-btn" data-key="N">N</button>
+              <button class="key-btn" data-key="M">M</button>
+              <button class="key-btn symbol-key" data-key=","><span>&lt;</span><span>,</span></button>
+              <button class="key-btn symbol-key" data-key="."><span>&gt;</span><span>.</span></button>
+              <button class="key-btn symbol-key" data-key="/"><span>?</span><span>/</span></button>
+              <button class="key-btn special-key shift-key" data-key="SHIFT">Shift</button>
+            </div>
+
+            <!-- Row 5: Fn, Ctrl, Win, Alt, Space, AltGr, Ctrl, Navigation Arrows -->
+            <div class="key-row bottom-row">
+              <button class="key-btn special-key sm-key" data-key="FN">Fn</button>
+              <button class="key-btn special-key sm-key" data-key="CTRL">Ctrl</button>
+              <button class="key-btn special-key sm-key" data-key="WIN">❖</button>
+              <button class="key-btn special-key sm-key" data-key="ALT">Alt</button>
+              <button class="key-btn space-key" data-key="SPACE">Space</button>
+              <button class="key-btn special-key sm-key" data-key="ALTGR">AltGr</button>
+              <button class="key-btn special-key sm-key" data-key="CTRL">Ctrl</button>
+              <button class="key-btn arrow-key" data-key="LEFT">←</button>
+              <div class="arrow-stack">
+                <button class="key-btn arrow-key half-key" data-key="UP">↑</button>
+                <button class="key-btn arrow-key half-key" data-key="DOWN">↓</button>
+              </div>
+              <button class="key-btn arrow-key" data-key="RIGHT">→</button>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Document Generation & Export Toolbar -->
+        <div class="export-toolbar-card">
+          <span class="export-label">EXPORT & GENERATE:</span>
+          <div class="export-buttons-grid">
+            <button id="export-pdf-btn" class="export-chip-btn" title="Export as PDF Document">
+              📄 PDF
+            </button>
+            <button id="export-image-btn" class="export-chip-btn" title="Export as PNG Image">
+              🖼️ Image
+            </button>
+            <button id="export-report-btn" class="export-chip-btn" title="Generate Executive Report">
+              📑 Report
+            </button>
+            <button id="export-ppt-btn" class="export-chip-btn" title="Export as PowerPoint (.pptx)">
+              📊 PPT
+            </button>
+            <button id="export-word-btn" class="export-chip-btn" title="Export as Word (.docx)">
+              📝 Word
+            </button>
+            <button id="export-video-btn" class="export-chip-btn video-accent" title="Generate Typing Video (.webm)">
+              🎥 Video Clip
+            </button>
+          </div>
+        </div>
+
+        <!-- Quick Word Predictions Bar -->
+        <div class="word-suggestions" id="word-suggestions-bar">
+          <span class="suggestion-label">Suggestions:</span>
+          <div class="suggestions-list" id="suggestions-list">
+            <!-- Dynamically populated buttons -->
+          </div>
+        </div>
+
+      </section>
+
+    </main>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal-overlay hidden">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h2>Tracking & Calibration Settings</h2>
+          <button id="close-modal-btn" class="close-icon-btn">&times;</button>
+        </div>
+
+        <div class="modal-body">
+          <div class="setting-group">
+            <label for="ear-threshold">
+              <span>Blink Threshold (EAR): <strong id="ear-threshold-val">0.21</strong></span>
+              <span class="setting-hint">Lower = requires harder blink. Higher = more sensitive.</span>
+            </label>
+            <input type="range" id="ear-threshold" min="0.12" max="0.32" step="0.01" value="0.21">
+          </div>
+
+          <div class="setting-group">
+            <label for="sensitivity-x">
+              <span>Nose Cursor Sensitivity (X & Y): <strong id="sensitivity-val">2.8x</strong></span>
+            </label>
+            <input type="range" id="sensitivity-x" min="1.0" max="6.0" step="0.2" value="2.8">
+          </div>
+
+          <div class="setting-group">
+            <label for="smoothing-factor">
+              <span>Cursor Motion Smoothing: <strong id="smoothing-val">0.25</strong></span>
+              <span class="setting-hint">Lower = smoother, Higher = faster response.</span>
+            </label>
+            <input type="range" id="smoothing-factor" min="0.05" max="0.60" step="0.05" value="0.25">
+          </div>
+
+          <div class="setting-group toggle-group">
+            <label for="audio-toggle">Sound Effects on Blink</label>
+            <input type="checkbox" id="audio-toggle" checked>
+          </div>
+
+          <div class="setting-group toggle-group">
+            <label for="dwell-click-toggle">
+              <span>Dwell Selection (Auto-click on hover)</span>
+              <span class="setting-hint">Type automatically after holding cursor for 1.5s</span>
+            </label>
+            <input type="checkbox" id="dwell-click-toggle">
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button id="reset-settings-btn" class="outline-btn sm">Reset Defaults</button>
+          <button id="save-modal-btn" class="primary-btn sm">Done</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <div class="footer-content">
+        <span>EyeWrite v1.0</span>
+        <span class="footer-divider">•</span>
+        <span>Hands-Free Accessibility Virtual Keyboard</span>
+        <span class="footer-divider">•</span>
+        <span>Powered by AI Facial Vision Tracking</span>
+      </div>
+    </footer>
+
+  </div>
+
+  <!-- Application Logic -->
+  <script src="app.js"></script>
+</body>
+</html>
